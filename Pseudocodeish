@@ -1,0 +1,192 @@
+globals [
+  current_board ; A 2d list containing the current state of the game.
+]
+
+breed [crosses cross] ;; AI player will place crosses
+breed [noughts nought] ;; Human player places noughts
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;                     SETUP                      ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to setup
+  clear-all
+  ; set the color of the pataches
+  ask patches [
+    ifelse (pxcor + pycor) mod 2 = 0
+      [set pcolor 28]
+      [set pcolor 48]
+  ]
+  ; initialise the board. We use _ to indicate the space is empty.
+  set current_board (list  ( list "_" "_" "_" )
+                           ( list "_" "_" "_" )
+                           ( list "_" "_" "_" )  )
+
+  ; You might want to use these two line to help debug your code:
+  ;let best_move find-best-move current_board;
+  ;show (word "The selected move is :" best_move)
+  reset-ticks
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;                      PLAY                      ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;
+;; Detects a mouse click, and places a nought in the location of the mouse click;
+;;  then calls ai-place-cross.
+to play
+  if mouse-down? and not any? turtles-on patch mouse-xcor mouse-ycor [
+    ; place a nought at the location the human has clicked:
+     create-noughts 1 [
+       set xcor round mouse-xcor
+       set ycor round mouse-ycor
+       set shape "circle 2"
+      ]
+    set current_board replace-in-board mouse-xcor mouse-ycor current_board "o"
+
+    ; AI places a cross
+    ai-place-cross
+  ]
+  tick
+end
+
+;;;;;;;;;;;;;;;;;
+;; Calls minimax to find the best move  --- YOU NEED TO IMPLEMENT minimax
+;;  and places the x counter on the location returned by minimax.
+to ai-place-cross
+  let bestMove minimax current_board
+  if item 0 bestMove = -1 [ stop ]
+  create-crosses 1 [
+    set xcor round item 0 bestMove
+    set ycor round item 1 bestMove
+    set shape "x"
+  ]
+  set current_board replace-in-board (item 0 bestMove) (item 1 bestMove) current_board "x"
+end
+
+;=================================================================
+;=================================================================
+
+;;;;;;;;;;;;;;;;
+;; returns a list containing the x,y position of the best move (according to minimax) for the given board.
+;; The board is a 2d list containing single character strings. "_" is used to indicate empty locations.
+to-report minimax [board]
+  ;;;;
+  ; ADD YOUR CODE HERE
+  ;;;
+  report (list -1 -1)
+end
+
+
+to-report MAX_VALUE[board]
+  if has-any-player-won? [evaluate[board]]
+    report calculate-utility[evaluate[board]]
+  let v = -10000
+  for each action ACTIONS[board]
+  v = max(v,MIN_VALUE(RESULT[board, action]))
+  report v  
+end
+
+
+to-report MIN_VALUE[board]
+  if has-any-player-won? [evaluate[board]]
+    report calculate-utility[evaluate[board]]
+  let v = 10000
+  for each action ACTIONS[board]
+  v = min(v,MAX_VALUE(RESULT[board, action]))
+  report v  
+end
+
+
+
+to-report ACTIONS[board]
+  ;; list of possible place-cross's 
+  actions = []
+  for-each value board
+     if value is _ -> actions.append(value)
+  report actions
+end
+
+to-report RESULT[board, action]
+  report replaceinboard[action, board, cross]
+end
+
+
+
+
+
+
+;=================================================================
+;=================================================================
+; Methods you might/will want to call:
+
+; Replaces the value at (x, y) within the board with player_char
+to-report replace-in-board [x y board player_char]
+   let line item round y board
+   set line replace-item round x line player_char
+   set board replace-item round y board line
+  report board
+end
+
+;------------------------
+; returns 10 if x has won or -10 if o has won
+to-report evaluate [board]
+  ; Check rows for x or o victory:
+  let i 0
+  repeat 3 [
+    if item i item 0 board = item i item 1 board and item i item 1 board = item i item 2 board [
+      ( ifelse item i item 0 board = "x" [ report  10]
+               item i item 0 board = "o" [ report -10 ] )
+    ]
+    set i i + 1
+  ]
+  ; Check columns for x or o victory.
+  set i 0
+  repeat 3 [
+    if item 0 item i board = item 1 item i board and item 1 item i board = item 2 item i board [
+      ( ifelse item 0 item i board = "x" [ report  10 ]
+               item 0 item i board = "o" [ report -10 ] )
+    ]
+    set i i + 1
+  ]
+
+  ; Check diagonals for x or o victory.
+  if item 0 item 0 board = item 1 item 1 board and item 1 item 1 board = item 2 item 2 board [
+    ( ifelse item 0 item 0 board = "x" [ report  10 ]
+             item 0 item 0 board = "o" [ report -10 ] )
+  ]
+  if item 2 item 0 board = item 1 item 1 board and item 1 item 1 board = item 0 item 2 board [
+    ( ifelse item 2 item 0 board = "x" [ report  10 ]
+             item 2 item 0 board = "o" [ report -10 ] )
+  ]
+  ; Else if neither of them have won, then return 0
+  report 0
+end
+
+;------------------------
+
+to-report has-any-player-won? [score]
+  report (score = 10 or score = -10)
+end
+
+;------------------------
+
+to-report moves-left? [board]
+  report not empty? filter [ row -> member? "_" row ] board
+  ;report any? patches with [not any? turtles-here]
+end
+
+;------------------------
+;So that the AI tries to win in the least possible moves, when x wins,
+; we need to take the depth reached away from the utility (i.e. 10-depth).
+; When o wins, depth reach should be added to the utility (i.e. -10+depth)
+to-report calculate-utility [score depth]
+  ; If maximizer has won the game, return their evaluated score
+  if (score = 10) [  report score - depth]
+  ; If minimizer has won the game, return their evaluated score
+  if (score = -10)  [  report score + depth ]
+end
+
+;=================================================================
