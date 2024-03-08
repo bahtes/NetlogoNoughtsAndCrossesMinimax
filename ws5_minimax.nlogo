@@ -37,7 +37,9 @@ end
 ;; Detects a mouse click, and places a nought in the location of the mouse click;
 ;;  then calls ai-place-cross.
 to play
-  if mouse-down? and not any? turtles-on patch mouse-xcor mouse-ycor [
+  if not has-any-player-won? evaluate current_board
+  [
+    if mouse-down? and not any? turtles-on patch mouse-xcor mouse-ycor [
     ; place a nought at the location the human has clicked:
      create-noughts 1 [
        set xcor round mouse-xcor
@@ -50,10 +52,12 @@ to play
     ai-place-cross
   ]
   tick
+  ]
+
 end
 
 ;;;;;;;;;;;;;;;;;
-;; Calls minimax to find the best move  --- YOU NEED TO IMPLEMENT minimax
+;; Calls minimax to find the best move
 ;;  and places the x counter on the location returned by minimax.
 to ai-place-cross
   let bestMove minimax current_board
@@ -70,23 +74,138 @@ end
 ;=================================================================
 
 ;;;;;;;;;;;;;;;;
-;; returns a list containing the x,y position of the best move (according to minimax) for the given board.
-;; The board is a 2d list containing single character strings. "_" is used to indicate empty locations.
 to-report minimax [board]
-  if has-any-player-won? evaluate current_board
+  ; Check if any player has won, if they have return -1 -1 to indicate someone has won
+  if (has-any-player-won? evaluate current_board)
   [
     report (list -1 -1)
   ]
 
-  report (list -1 -1)
+  let best-score -10000  ; set best-score to a very low value
+  let best-move (list -1 -1)  ; set best-move to a placeholder list
+  let y 0
 
+  repeat 3  ;loops through y
+  [
+    let x 0  ;loops through x
 
+    repeat 3 [
+      ; If position (x, y) is empty
+      if (item x item y board = "_")
+      [
+        ; Make the move for the minimising player 'x'
+        set board replace-in-board x y board "x"
+
+        ; Get the score for the current move using the min_value function
+        let move-score min_value board 0
+
+        ; Undo the move to explore other possibilities
+        set board replace-in-board x y board "_"
+
+        ; Update the best score and best move if the current move is better
+        if (move-score > best-score)
+        [
+          set best-score move-score
+          set best-move replace-item 0 best-move x
+          set best-move replace-item 1 best-move y
+        ]
+      ]
+      set x x + 1
+    ]
+    set y y + 1
+  ]
+
+  ; Report the best move found
+  report best-move
+end
+
+to-report max_value [board depth]
+  ; If any player has won, return the utility value
+  if (has-any-player-won? evaluate board)
+  [
+    report calculate-utility evaluate board depth
+  ]
+  ; If there are no more moves left, return 0
+  if (not moves-left? board)
+  [
+    report 0
+  ]
+
+  let v -10000  ; Initialize v to a very low value
+  let y 0
+
+  repeat 3
+  [
+    let x 0
+
+    repeat 3
+    [
+      ; If the cell at position (x, y) is empty
+      if item x item y board = "_"
+      [
+        ; Make the move for the maximizing player ('x')
+        set board replace-in-board x y board "x"
+
+        ; Recursively find the maximum value of the opponent's move
+        set v max (list v (min_value board (depth + 1)))
+
+        ; Undo the move to explore other possibilities
+        set board replace-in-board x y board "_"
+      ]
+      set x x + 1
+    ]
+    set y y + 1
+  ]
+
+  ; Report the maximum value found
+  report v
+end
+
+to-report min_value [board depth]
+  ; If any player has won, return the utility value
+  if (has-any-player-won? evaluate board)
+  [
+    report calculate-utility evaluate board depth
+  ]
+  ; If there are no more moves left, return 0
+  if (not moves-left? board)
+  [
+    report 0
+  ]
+
+  let v 10000  ; Initialize v to a very high value
+  let y 0
+
+  repeat 3
+  [
+    let x 0
+
+    repeat 3
+    [
+      ; If the cell at position (x, y) is empty
+      if item x item y board = "_"
+      [
+        ; Make the move for the minimizing player ('o')
+        set board replace-in-board x y board "o"
+
+        ; Recursively find the minimum value of the opponent's move
+        set v min (list v (max_value board (depth + 1)))
+
+        ; Undo the move to explore other possibilities
+        set board replace-in-board x y board "_"
+      ]
+      set x x + 1
+    ]
+    set y y + 1
+  ]
+
+  ; Report the minimum value found
+  report v
 end
 
 
 ;=================================================================
 ;=================================================================
-; Methods you might/will want to call:
 
 ; Replaces the value at (x, y) within the board with player_char
 to-report replace-in-board [x y board player_char]
@@ -102,7 +221,7 @@ to-report evaluate [board]
   ; Check rows for x or o victory:
   let i 0
   repeat 3 [
-    if item i item 0 board = item i item 1 board and item i item 1 board = item i item 2 board [
+    if item i item 0 board = item i item 1 board and item i item 1 board = item i item 2 board[
       ( ifelse item i item 0 board = "x" [ report  10]
                item i item 0 board = "o" [ report -10 ] )
     ]
@@ -111,7 +230,7 @@ to-report evaluate [board]
   ; Check columns for x or o victory.
   set i 0
   repeat 3 [
-    if item 0 item i board = item 1 item i board and item 1 item i board = item 2 item i board [
+    if item 0 item i board = item 1 item i board and item 1 item i board = item 2 item i board[
       ( ifelse item 0 item i board = "x" [ report  10 ]
                item 0 item i board = "o" [ report -10 ] )
     ]
@@ -119,11 +238,12 @@ to-report evaluate [board]
   ]
 
   ; Check diagonals for x or o victory.
-  if item 0 item 0 board = item 1 item 1 board and item 1 item 1 board = item 2 item 2 board [
+  if item 0 item 0 board = item 1 item 1 board and item 1 item 1 board = item 2 item 2 board[
     ( ifelse item 0 item 0 board = "x" [ report  10 ]
              item 0 item 0 board = "o" [ report -10 ] )
   ]
-  if item 2 item 0 board = item 1 item 1 board and item 1 item 1 board = item 0 item 2 board [
+
+  if item 2 item 0 board = item 1 item 1 board and item 1 item 1 board = item 0 item 2 board[
     ( ifelse item 2 item 0 board = "x" [ report  10 ]
              item 2 item 0 board = "o" [ report -10 ] )
   ]
@@ -140,8 +260,8 @@ end
 ;------------------------
 
 to-report moves-left? [board]
-  report not empty? filter [ row -> member? "_" row ] board
-  ;report any? patches with [not any? turtles-here]
+  ;report not empty? filter [ row -> member? "_" row ] board
+  report any? patches with [not any? turtles-here]
 end
 
 ;------------------------
