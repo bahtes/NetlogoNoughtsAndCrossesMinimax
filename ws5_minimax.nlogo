@@ -75,35 +75,37 @@ end
 
 ;;;;;;;;;;;;;;;;
 to-report minimax [board]
-  ; Check if any player has won, if they have return -1 -1 to indicate someone has won
-  if (has-any-player-won? evaluate current_board)
+  
+  if (has-any-player-won? evaluate current_board)  ;check if any player has won, if they it have returns -1 -1 to indicate someone has won
   [
     report (list -1 -1)
   ]
 
-  let best-score -10000  ; set best-score to a very low value
-  let best-move (list -1 -1)  ; set best-move to a placeholder list
+  let best-score -10000  ;set best-score to a very low number
+  let best-move (list -1 -1)  ;set best-move to a -1 -1 as a placeholder, if this is returned at the end it will not make a move
+  
   let y 0
 
   repeat 3  ;loops through y
   [
-    let x 0  ;loops through x
+    let x 0  
 
-    repeat 3 [
-      ; If position (x, y) is empty
-      if (item x item y board = "_")
+    repeat 3  ;loops through x
+    [
+      
+      if (item x item y board = "_") ;if position (x, y) is empty
       [
-        ; Make the move for the minimising player 'x'
-        set board replace-in-board x y board "x"
+        
+        set board replace-in-board x y board "x"  ;make the move for the minimising player 'x'/the computer
 
-        ; Get the score for the current move using the min_value function
-        let move-score min_value board 0
+        
+        let move-score min_value board 0  ;get the score for the current move using the min_value function
 
-        ; Undo the move to explore other possibilities
-        set board replace-in-board x y board "_"
+        
+        set board replace-in-board x y board "_"  ;undo the move to explore other possibilities
 
-        ; Update the best score and best move if the current move is better
-        if (move-score > best-score)
+        
+        if (move-score > best-score)  ;update the best score and best move if the current move is better
         [
           set best-score move-score
           set best-move replace-item 0 best-move x
@@ -114,24 +116,22 @@ to-report minimax [board]
     ]
     set y y + 1
   ]
-
-  ; Report the best move found
-  report best-move
+  
+  report best-move  ;return the best move found
 end
 
 to-report max_value [board depth]
-  ; If any player has won, return the utility value
-  if (has-any-player-won? evaluate board)
+  if (has-any-player-won? evaluate board)  ;if any player has won, return the value of calculate-utility, this so the AI tries to win in the least possible moves
   [
     report calculate-utility evaluate board depth
   ]
-  ; If there are no more moves left, return 0
-  if (not moves-left? board)
+  
+  if (not moves-left? board)  ;if there are no more moves left return 0
   [
     report 0
   ]
 
-  let v -10000  ; Initialize v to a very low value
+  let v -10000  ;initialize v to a very low value
   let y 0
 
   repeat 3
@@ -140,40 +140,39 @@ to-report max_value [board depth]
 
     repeat 3
     [
-      ; If the cell at position (x, y) is empty
-      if item x item y board = "_"
+      
+      if item x item y board = "_"  ;if the cell is empty
       [
-        ; Make the move for the maximizing player ('x')
-        set board replace-in-board x y board "x"
+        
+        set board replace-in-board x y board "x"  ;make the move for the maximizing player ('x')
 
-        ; Recursively find the maximum value of the opponent's move
-        set v max (list v (min_value board (depth + 1)))
+        
+        set v max (list v (min_value board (depth + 1)))  ;find the maximum value of the minimizing players move using recursion
 
-        ; Undo the move to explore other possibilities
-        set board replace-in-board x y board "_"
+        
+        set board replace-in-board x y board "_"  ;undo the move so other moves can be checked
       ]
       set x x + 1
     ]
     set y y + 1
   ]
 
-  ; Report the maximum value found
-  report v
+  
+  report v  ;return the maximum value found
 end
 
 to-report min_value [board depth]
-  ; If any player has won, return the utility value
-  if (has-any-player-won? evaluate board)
+  if (has-any-player-won? evaluate board)  ;if any player has won, return the value of calculate-utility, this so the AI tries to win in the least possible moves
   [
     report calculate-utility evaluate board depth
   ]
-  ; If there are no more moves left, return 0
-  if (not moves-left? board)
+  
+  if (not moves-left? board)  ;if there are no more moves left return 0
   [
     report 0
   ]
 
-  let v 10000  ; Initialize v to a very high value
+  let v 10000  ;initialize v to a very high value
   let y 0
 
   repeat 3
@@ -182,25 +181,25 @@ to-report min_value [board depth]
 
     repeat 3
     [
-      ; If the cell at position (x, y) is empty
-      if item x item y board = "_"
+      
+      if item x item y board = "_"  ;if the cell is empty
       [
-        ; Make the move for the minimizing player ('o')
-        set board replace-in-board x y board "o"
+        
+        set board replace-in-board x y board "o"  ;make the move for the minimizing player ('o')
 
-        ; Recursively find the minimum value of the opponent's move
-        set v min (list v (max_value board (depth + 1)))
+        
+        set v min (list v (max_value board (depth + 1)))  ;recursively find the minimum value of the opponent's move
 
-        ; Undo the move to explore other possibilities
-        set board replace-in-board x y board "_"
+        
+        set board replace-in-board x y board "_"  ;undo the move so other moves can be checked
       ]
       set x x + 1
     ]
     set y y + 1
   ]
 
-  ; Report the minimum value found
-  report v
+  
+  report v  ;return the minimum value found
 end
 
 
