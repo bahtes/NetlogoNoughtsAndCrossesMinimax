@@ -97,11 +97,25 @@ to-report minimax [board]
       if (item x item y board = "_") ;if position (x, y) is empty
       [
 
-        set board replace-in-board x y board "x"  ;make the move for the minimising player 'x'/the computer
+        set board replace-in-board x y board "x"  ;make the move for the maximising player 'x'/the computer
 
 
         let move-score min_value board 0  ;get the score for the current move using the min_value function
 
+
+        ifelse(evaluate board = 10)  ;if it is a winning move this move set it to a very high score (highest possible) if not run the code in the brackets which checks if it stops an oppositions winning move in that case it sets that move to a very high score (second highest possible)
+        [
+          set move-score 100000
+        ]
+        [
+          set board replace-in-board x y board "o"
+          if (evaluate board = -10)
+          [
+            set move-score 99999
+          ]
+        ]
+
+        set board replace-in-board x y board "o"  ;make the move for the maximising player 'x'/the computer
 
         set board replace-in-board x y board "_"  ;undo the move to explore other possibilities
 
@@ -140,7 +154,7 @@ end
 to-report max_value [board depth]
   if (has-any-player-won? evaluate board)  ;if any player has won, return the value of calculate-utility, this so the AI tries to win in the least possible moves
   [
-    report calculate-utility evaluate board depth
+    report (calculate-utility evaluate board depth)
   ]
 
   if (not moves-left? board)  ;if there are no more moves left return 0
@@ -166,7 +180,6 @@ to-report max_value [board depth]
 
         set v max (list v (min_value board (depth + 1)))  ;find the maximum value of the minimizing players move using recursion
 
-
         set board replace-in-board x y board "_"  ;undo the move so other moves can be checked
       ]
       set x x + 1
@@ -174,6 +187,10 @@ to-report max_value [board depth]
     set y y + 1
   ]
 
+  if (v = -10000)
+  [
+    set v 9999
+  ]
 
   report v  ;return the maximum value found
 end
@@ -181,7 +198,7 @@ end
 to-report min_value [board depth]
   if (has-any-player-won? evaluate board)  ;if any player has won, return the value of calculate-utility, this so the AI tries to win in the least possible moves
   [
-    report calculate-utility evaluate board depth
+    report (calculate-utility evaluate board depth)
   ]
 
   if (not moves-left? board)  ;if there are no more moves left return 0
