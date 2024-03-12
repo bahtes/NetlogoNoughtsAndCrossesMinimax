@@ -1,323 +1,292 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;                     CMP2020-2324 Snake game                            ;;
+;;                                                                        ;;
+;; If you find any bugs or need help with Netlogo, contact the module     ;;
+;;  delivery team (e.g. by posting a message on blackboard).              ;;
+;;                                                                        ;;
+;; This model was based on:                                               ;;
+;;  Brooks, P. (2020) Snake-simple. Stuyvesant High School. Avaliable
+;;  from http://bert.stuy.edu/pbrooks/fall2020/materials/intro-year-1/Snake-simple.html
+;;    [accessed 16 November 2023].                                        ;;
+;;                                                                        ;;
+;; Don't forget to appropriately reference the resources you use!         ;;
+;;                                                                        ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 globals [
-  current_board ; A 2d list containing the current state of the game.
+  wall-color
+  clear-colors ; list of colors that patches the snakes can enter have
+
+  level tool ; ignore these two variables they are here to prevent warnings when loading the world/map.
 ]
 
-breed [crosses cross] ;; AI player will place crosses
-breed [noughts nought] ;; Human player places noughts
+patches-own [
+  age ; if not part of a snake, age=-1. Otherwise age = ticks spent being a snake patch.
+  dist ;distance from the food
+]
 
+breed [snakes snake]
+snakes-own [
+  team ; either red team or blue team
+  mode ; how is the snake controlled.
+  snake-age ; i.e., how long is the snake
+  snake-color ; color of the patches that make up the snake
+]
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;                     SETUP                      ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;=======================================================
+;; Setup
 
-to setup
+to setup ; observer
   clear-all
-  ; set the color of the pataches
-  ask patches [
-    ifelse (pxcor + pycor) mod 2 = 0
-      [set pcolor 28]
-      [set pcolor 48]
-  ]
-  ; initialise the board. We use _ to indicate the space is empty.
-  set current_board (list  ( list "_" "_" "_" )
-                           ( list "_" "_" "_" )
-                           ( list "_" "_" "_" )  )
+  setup-walls
+  setup-snakes
 
-  ; You might want to use these two line to help debug your code:
-  ;let best_move find-best-move current_board;
-  ;show (word "The selected move is :" best_move)
+  set clear-colors [black green]
+  ; there will alwasy be two randomly placed pieces of food within the environment:
+  make-food
+  make-food
   reset-ticks
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;                      PLAY                      ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;--------------------------------
 
-;;;;;;;;;;;;;;;;;
-;; Detects a mouse click, and places a nought in the location of the mouse click;
-;;  then calls ai-place-cross.
-to play
-  if not has-any-player-won? evaluate current_board
+to setup-walls  ; observer
+  ; none-wall patches are colored black:
+  ask patches
   [
-    if mouse-down? and not any? turtles-on patch mouse-xcor mouse-ycor [
-    ; place a nought at the location the human has clicked:
-     create-noughts 1 [
-       set xcor round mouse-xcor
-       set ycor round mouse-ycor
-       set shape "circle 2"
-      ]
-    set current_board replace-in-board mouse-xcor mouse-ycor current_board "o"
-
-    ; AI places a cross
-    ai-place-cross
+    set age -1
+    set dist 10000
+    set pcolor black
   ]
+
+  set wall-color gray
+
+  ifelse map-file = "empty" [
+    ; Set the edge of the environment to the wall-color:
+    ask patches with [abs pxcor = max-pxcor or abs pycor = max-pycor]
+    [
+      set pcolor wall-color
+      set dist 9999999999
+    ]
+  ] [  ; load the map:
+    let map_file_path (word "maps/" map-file ".csv")
+    ifelse (file-exists? map_file_path) [
+      import-world map_file_path
+    ] [
+      user-message "Cannot find map file. Please check the \"maps\" directory is in the same directory as this Netlogo model."
+    ]
+    ; set the patch size (so that the larger maps don't cover the controls)
+    ifelse map-file = "snake-map-3" [ set-patch-size 11 ]
+                                    [ set-patch-size 14 ]
+  ]
+end
+
+;;--------------------------------
+
+to setup-snakes  ; observer
+  ; create the red/orange snake:
+  create-snakes 1 [
+    set team "red" ; /orange
+    set xcor max-pxcor - 1
+    set color red - 2
+    set snake-color red + 11
+
+    set mode red-team-mode
+  ]
+  ; create the blue/purple snake (but only when in two-player mode):
+  if two-player[
+    create-snakes 1 [
+      set team "blue" ;/purple
+      set xcor 0 -(max-pxcor - 1)
+      set color blue - 2
+      set snake-color blue + 11
+
+      set mode blue-team-mode
+    ]
+  ]
+  ; set the attributes that are the same for both snakes:
+  ask snakes [
+    set heading 0
+    set ycor 0
+    set snake-age 2 ; i.e. body contains two patches
+
+    ;; Create the initial snake body
+    ask patch [xcor] of self  0 [set pcolor [snake-color] of myself
+                                 set age 0 ]
+    ask patch [xcor] of self  -1 [set pcolor [snake-color] of myself
+                                  set age 1]
+  ]
+end
+
+;;=======================================================
+
+;;;
+; Make a random patch green (e.g. the color of the food)
+to make-food
+  ask one-of patches with [pcolor = black] [
+    set dist 0
+    set pcolor green
+  ]
+end
+
+;;=======================================================
+
+;;;
+; Our main game control method
+to go ; observer
+  let loser nobody ; nobody has lost the game yet...
+  let winner nobody ; nobody has won the game yet...
+
+  ask snakes [
+    ; 1. Set which direction the snake is facing:
+    ;  You will want to expand the following if statement -- to call the approaches that you implement
+    ( ifelse mode = "random"
+      [
+        face-random-neighboring-patch
+      ]
+      [
+        ( ifelse mode = "human"
+        [
+           ;do nothing
+        ]
+        [
+           ( ifelse mode = "dijkstra's"
+              [
+                dijkstra
+              ]
+              [
+                ;other
+              ]
+            )
+          ]
+        )
+      ]
+    )
+
+    ; 2. move the head of the snake forward
+    fd 1
+
+    ; 3. check for a collision (and thus game lost)
+    if not member? pcolor clear-colors [
+      set loser self
+      stop
+    ]
+
+    ; 4. eat food
+    if pcolor = green [
+      make-food
+      set snake-age snake-age + 1
+    ]
+
+    ; 5. check if max age reached (and thus game won)
+    if snake-age >= max-snake-age [
+      set winner self
+      stop
+    ]
+
+    ; 6. move snake body parts forward
+    ask patches with [pcolor = [snake-color] of myself] [
+      set age age + 1
+      if age > [snake-age] of myself [
+        set age -1
+        set pcolor black
+      ]
+    ]
+
+    ; 7. set the patch colour and age of the snake's head.
+    set pcolor snake-color
+    set age 0
+  ]
+
+  ; A collision has happened: show message and stop the game
+  (ifelse loser != nobody [
+    user-message (word "Game Over! Team " [team] of loser " lost")
+    stop
+  ] winner != nobody [
+    user-message (word "Game Over! Team " [team] of winner " won!")
+    stop
+  ])
   tick
-  ]
-
 end
 
-;;;;;;;;;;;;;;;;;
-;; Calls minimax to find the best move
-;;  and places the x counter on the location returned by minimax.
-to ai-place-cross
-  let bestMove minimax current_board
-  if item 0 bestMove = -1 [ stop ]
-  create-crosses 1 [
-    set xcor round item 0 bestMove
-    set ycor round item 1 bestMove
-    set shape "x"
+
+;;--------------------------------------------
+
+;;;
+; Make the turtle face a random unoccupied neighboring patch
+;  if all patches are occupied, then any patch will be selected (and the snake lose :( )
+to face-random-neighboring-patch ; turtle
+  let next-patch one-of neighbors4 with [member? pcolor clear-colors]
+
+  if next-patch = nobody [ ; if none of the neighbours are clear:
+    set next-patch one-of neighbors4
   ]
-  set current_board replace-in-board (item 0 bestMove) (item 1 bestMove) current_board "x"
-  show(word "placed x at " item 0 bestMove "," item 1 bestMove)
+  ; make the snake face towards the patch we want the snake to go to:
+  face next-patch
 end
 
-;=================================================================
-;=================================================================
+;;--------------------------------------------
 
-;;;;;;;;;;;;;;;;
-to-report minimax [board]
+;;---------------------
+;; Human controlled snakes:
+to head-up [selected-team]
+  ask snakes with [team = selected-team] [ set heading 0 ]
+end
+;----
+to head-right [selected-team]
+  ask snakes with [team = selected-team] [ set heading 90 ]
+end
+;----
+to head-down [selected-team]
+  ask snakes with [team = selected-team] [ set heading 180 ]
+end
+;----
+to head-left [selected-team]
+  ask snakes with [team = selected-team] [ set heading 270 ]
+end
+;;---------------------
 
-  if (has-any-player-won? evaluate current_board)  ;check if any player has won, if they it have returns -1 -1 to indicate someone has won
+;;=======================================================
+
+;; for displaying the age within the GUI:
+to-report report-snake-age [team-name]
+  report [snake-age] of one-of snakes with [team = team-name]
+end
+
+;;---------------------
+
+to dijkstra
+
+  let d 0
+
+  loop
   [
-    report (list -1 -1)
-  ]
-
-  let best-score -10000  ;set best-score to a very low number
-  let best-move (list -1 -1)  ;set best-move to a -1 -1 as a placeholder, if this is returned at the end it will not make a move
-
-  let y 0
-
-  repeat 3  ;loops through y
-  [
-    let x 0
-
-    repeat 3  ;loops through x
+    ask patches with [dist = d]
     [
 
-      if (item x item y board = "_") ;if position (x, y) is empty
+      ask neighbors with [pcolor = black and dist > d]
       [
-
-        set board replace-in-board x y board "x"  ;make the move for the maximising player 'x'/the computer
-
-
-        let move-score min_value board 0  ;get the score for the current move using the min_value function
-
-
-        ifelse(evaluate board = 10)  ;if it is a winning move this move set it to a very high score (highest possible) if not run the code in the brackets which checks if it stops an oppositions winning move in that case it sets that move to a very high score (second highest possible)
-        [
-          set move-score 100000
-        ]
-        [
-          set board replace-in-board x y board "o"
-          if (evaluate board = -10)
-          [
-            set move-score 99999
-          ]
-        ]
-
-        set board replace-in-board x y board "o"  ;make the move for the maximising player 'x'/the computer
-
-        set board replace-in-board x y board "_"  ;undo the move to explore other possibilities
-
-        show(word "pos: " x "," y)
-        show(word "move score: "move-score)
-        if (move-score > best-score)  ;update the best score and best move if the current move is better
-        [
-          set best-score move-score
-          set best-move replace-item 0 best-move x
-          set best-move replace-item 1 best-move y
-          show(word "best move:" best-move)
-          show(word "best score: " best-score)
-        ]
-
-        if (move-score = best-score)
-        [
-          if (random 1 = 0)
-          [
-            set best-score move-score
-            set best-move replace-item 0 best-move x
-            set best-move replace-item 1 best-move y
-            show(word "best move:" best-move)
-            show(word "best score: " best-score)
-          ]
-        ]
-
+        set dist d + 1
       ]
-      set x x + 1
     ]
-    set y y + 1
-  ]
 
-  report best-move  ;return the best move found
-end
-
-to-report max_value [board depth]
-  if (has-any-player-won? evaluate board)  ;if any player has won, return the value of calculate-utility, this so the AI tries to win in the least possible moves
-  [
-    report (calculate-utility evaluate board depth)
-  ]
-
-  if (not moves-left? board)  ;if there are no more moves left return 0
-  [
-    report 0
-  ]
-
-  let v -10000  ;initialize v to a very low value
-  let y 0
-
-  repeat 3  ;loops through y
-  [
-    let x 0
-
-    repeat 3  ;loops through x
+    if(d > 40)
     [
-
-      if item x item y board = "_"  ;if the cell is empty
-      [
-
-        set board replace-in-board x y board "x"  ;make the move for the maximizing player ('x')
-
-
-        set v max (list v (min_value board (depth + 1)))  ;find the maximum value of the minimizing players move using recursion
-
-        set board replace-in-board x y board "_"  ;undo the move so other moves can be checked
-      ]
-      set x x + 1
+      stop
     ]
-    set y y + 1
-  ]
 
-  if (v = -10000)
-  [
-    set v 9999
+    set d d + 1
   ]
-
-  report v  ;return the maximum value found
 end
-
-to-report min_value [board depth]
-  if (has-any-player-won? evaluate board)  ;if any player has won, return the value of calculate-utility, this so the AI tries to win in the least possible moves
-  [
-    report (calculate-utility evaluate board depth)
-  ]
-
-  if (not moves-left? board)  ;if there are no more moves left return 0
-  [
-    report 0
-  ]
-
-  let v 10000  ;initialize v to a very high value
-  let y 0
-
-  repeat 3
-  [
-    let x 0
-
-    repeat 3
-    [
-
-      if item x item y board = "_"  ;if the cell is empty
-      [
-
-        set board replace-in-board x y board "o"  ;make the move for the minimizing player ('o')
-
-
-        set v min (list v (max_value board (depth + 1)))  ;recursively find the minimum value of the opponent's move
-
-
-        set board replace-in-board x y board "_"  ;undo the move so other moves can be checked
-      ]
-      set x x + 1
-    ]
-    set y y + 1
-  ]
-
-
-  report v  ;return the minimum value found
-end
-
-
-;=================================================================
-;=================================================================
-
-; Replaces the value at (x, y) within the board with player_char
-to-report replace-in-board [x y board player_char]
-   let line item round y board
-   set line replace-item round x line player_char
-   set board replace-item round y board line
-  report board
-end
-
-;------------------------
-; returns 10 if x has won or -10 if o has won
-to-report evaluate [board]
-  ; Check rows for x or o victory:
-  let i 0
-  repeat 3 [
-    if item i item 0 board = item i item 1 board and item i item 1 board = item i item 2 board[
-      ( ifelse item i item 0 board = "x" [ report  10]
-               item i item 0 board = "o" [ report -10 ] )
-    ]
-    set i i + 1
-  ]
-  ; Check columns for x or o victory.
-  set i 0
-  repeat 3 [
-    if item 0 item i board = item 1 item i board and item 1 item i board = item 2 item i board[
-      ( ifelse item 0 item i board = "x" [ report  10 ]
-               item 0 item i board = "o" [ report -10 ] )
-    ]
-    set i i + 1
-  ]
-
-  ; Check diagonals for x or o victory.
-  if item 0 item 0 board = item 1 item 1 board and item 1 item 1 board = item 2 item 2 board[
-    ( ifelse item 0 item 0 board = "x" [ report  10 ]
-             item 0 item 0 board = "o" [ report -10 ] )
-  ]
-
-  if item 2 item 0 board = item 1 item 1 board and item 1 item 1 board = item 0 item 2 board[
-    ( ifelse item 2 item 0 board = "x" [ report  10 ]
-             item 2 item 0 board = "o" [ report -10 ] )
-  ]
-  ; Else if neither of them have won, then return 0
-  report 0
-end
-
-;------------------------
-
-to-report has-any-player-won? [score]
-  report (score = 10 or score = -10)
-end
-
-;------------------------
-
-to-report moves-left? [board]
-  ;report not empty? filter [ row -> member? "_" row ] board
-  report any? patches with [not any? turtles-here]
-end
-
-;------------------------
-;So that the AI tries to win in the least possible moves, when x wins,
-; we need to take the depth reached away from the utility (i.e. 10-depth).
-; When o wins, depth reach should be added to the utility (i.e. -10+depth)
-to-report calculate-utility [score depth]
-  ; If maximizer has won the game, return their evaluated score
-  if (score = 10) [  report score - depth]
-  ; If minimizer has won the game, return their evaluated score
-  if (score = -10)  [  report score + depth ]
-end
-
-;=================================================================
 @#$#@#$#@
 GRAPHICS-WINDOW
-208
+210
 10
-666
-469
+669
+470
 -1
 -1
-150.0
+11.0
 1
 10
 1
@@ -327,21 +296,21 @@ GRAPHICS-WINDOW
 0
 0
 1
-0
-2
-0
-2
-0
-0
+-20
+20
+-20
+20
+1
+1
 1
 ticks
 30.0
 
 BUTTON
-55
-20
-128
-53
+36
+37
+109
+70
 NIL
 setup
 NIL
@@ -355,12 +324,12 @@ NIL
 1
 
 BUTTON
-54
-66
-130
+36
+74
 99
+107
 NIL
-play
+go
 T
 1
 T
@@ -371,42 +340,256 @@ NIL
 NIL
 1
 
+CHOOSER
+477
+486
+615
+531
+red-team-mode
+red-team-mode
+"human" "random" "dijkstra's"
+1
+
+BUTTON
+251
+537
+306
+570
+up
+head-up \"blue\"
+NIL
+1
+T
+OBSERVER
+NIL
+W
+NIL
+NIL
+1
+
+BUTTON
+249
+601
+304
+634
+down
+head-down \"blue\"
+NIL
+1
+T
+OBSERVER
+NIL
+S
+NIL
+NIL
+1
+
+BUTTON
+196
+568
+251
+601
+left
+head-left \"blue\"
+NIL
+1
+T
+OBSERVER
+NIL
+A
+NIL
+NIL
+1
+
+BUTTON
+303
+571
+358
+604
+right
+head-right \"blue\"
+NIL
+1
+T
+OBSERVER
+NIL
+D
+NIL
+NIL
+1
+
+CHOOSER
+194
+485
+320
+530
+blue-team-mode
+blue-team-mode
+"human" "random" "dijkstra's"
+2
+
+BUTTON
+537
+535
+592
+568
+up
+head-up \"red\"
+NIL
+1
+T
+OBSERVER
+NIL
+I
+NIL
+NIL
+1
+
+BUTTON
+590
+566
+645
+599
+right
+head-right \"red\"
+NIL
+1
+T
+OBSERVER
+NIL
+L
+NIL
+NIL
+1
+
+BUTTON
+535
+599
+590
+632
+down
+head-down \"red\"
+NIL
+1
+T
+OBSERVER
+NIL
+K
+NIL
+NIL
+1
+
+BUTTON
+481
+567
+536
+600
+left
+head-left \"red\"
+NIL
+1
+T
+OBSERVER
+NIL
+J
+NIL
+NIL
+1
+
+CHOOSER
+34
+135
+181
+180
+map-file
+map-file
+"empty" "snake-map-1" "snake-map-2" "snake-map-3"
+0
+
+SWITCH
+33
+188
+181
+221
+two-player
+two-player
+0
+1
+-1000
+
+TEXTBOX
+690
+448
+912
+486
+You need to press setup after changing the map or modes.
+12
+0.0
+1
+
+SLIDER
+32
+230
+181
+263
+max-snake-age
+max-snake-age
+3
+30
+10.0
+1
+1
+NIL
+HORIZONTAL
+
+MONITOR
+324
+486
+399
+531
+Blue age
+report-snake-age \"blue\"
+0
+1
+11
+
+MONITOR
+619
+487
+690
+532
+Red age
+report-snake-age \"red\"
+0
+1
+11
+
 @#$#@#$#@
-## WHAT IS IT?
+# CMP2020 -- Assessment Item 1
 
-(a general understanding of what the model is trying to show or explain)
+__If you find any bugs in the code or have any questions regarding the assessment, please contact the module delivery team.__
 
-## HOW IT WORKS
+## Your details
 
-(what rules the agents use to create the overall behavior of the model)
+Name:
 
-## HOW TO USE IT
+Student Number:
 
-(how to use the model, including a description of each of the items in the Interface tab)
+## Extensions made
 
-## THINGS TO NOTICE
+(a brief description of the extensions you have made -- that go beyond the search algorithms studied during this module.)
 
-(suggested things for the user to notice while running the model)
 
-## THINGS TO TRY
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
 
-## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
 
-## NETLOGO FEATURES
 
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+## References
 
-## RELATED MODELS
+(add your references below the provided reference)
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
-
-## CREDITS AND REFERENCES
-
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+Brooks, P. (2020) Snake-simple. Stuyvesant High School. Avaliable from http://bert.stuy.edu/pbrooks/fall2020/materials/intro-year-1/Snake-simple.html [accessed 16 November 2023].
 @#$#@#$#@
 default
 true
